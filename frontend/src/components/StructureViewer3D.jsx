@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { RotateCw, Camera, Eye, Maximize2, Minimize2, ShieldAlert, Sparkles, RefreshCw, Layers } from 'lucide-react';
+import { RotateCw, Camera, Eye, Maximize2, Minimize2, ShieldAlert, Sparkles, RefreshCw } from 'lucide-react';
 
 export default function StructureViewer3D({
   accession,
@@ -14,7 +14,6 @@ export default function StructureViewer3D({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isSpinning, setIsSpinning] = useState(false);
-  const [showSurface, setShowSurface] = useState(false);
   const [colorScheme, setColorScheme] = useState('spectrum'); // 'spectrum', 'plddt', 'secondary'
   const [showNeighborhood, setShowNeighborhood] = useState(true);
   const [pdbLoaded, setPdbLoaded] = useState(false);
@@ -217,17 +216,10 @@ export default function StructureViewer3D({
       viewer.setStyle({}, { cartoon: { color: '#38bdf8' } });
     }
 
-    if (showSurface) {
-      viewer.addSurface(window.$3Dmol.SurfaceType.MS, {
-        opacity: 0.25,
-        color: '#94a3b8',
-      });
-    }
-
     viewer.render();
   };
 
-  // Re-apply style when colorScheme or showSurface changes
+  // Re-apply style when colorScheme changes
   useEffect(() => {
     if (!viewerRef.current || !pdbLoaded) return;
     applyBaseStyle(viewerRef.current, colorScheme);
@@ -236,7 +228,7 @@ export default function StructureViewer3D({
     if (selectedVariant) {
       highlightVariant(selectedVariant);
     }
-  }, [colorScheme, showSurface, pdbLoaded]);
+  }, [colorScheme, pdbLoaded]);
 
   // Highlight selected variant
   useEffect(() => {
@@ -437,16 +429,6 @@ export default function StructureViewer3D({
             title="Toggle Spin"
           >
             <RotateCw className={`w-3.5 h-3.5 ${isSpinning ? 'animate-spin' : ''}`} />
-          </button>
-
-          <button
-            onClick={() => setShowSurface(!showSurface)}
-            className={`p-2 rounded-lg text-xs flex items-center gap-1 transition-all ${
-              showSurface ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-300'
-            }`}
-            title="Toggle Molecular Surface Mesh"
-          >
-            <Layers className="w-3.5 h-3.5" />
           </button>
 
           <button
