@@ -5,3 +5,6 @@ __pycache__/
 results/
 .DS_Store
 dist/
+cache/
+frontend/node_modules/
+frontend/dist/

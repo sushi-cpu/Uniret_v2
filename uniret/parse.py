@@ -28,14 +28,21 @@ def _parse_xrefs(xrefs):
     try:
         xrefs_list = ast.literal_eval(xrefs)
     except (ValueError, SyntaxError):
-        return pd.Series({"name": "", "id": "", "url": "", "alternativeUrl": ""})
+        return pd.Series({"name": "", "id": "", "url": "", "alternativeUrl": "", "rs_id": ""})
     if not xrefs_list:
-        return pd.Series({"name": "", "id": "", "url": "", "alternativeUrl": ""})
+        return pd.Series({"name": "", "id": "", "url": "", "alternativeUrl": "", "rs_id": ""})
+
+    rs_id = next(
+        (str(x.get("id", "")).strip() for x in xrefs_list if x.get("name") == "dbSNP" or str(x.get("id", "")).startswith("rs")),
+        ""
+    )
+
     return pd.Series({
         "name":           xrefs_list[0].get("name", ""),
         "id":             xrefs_list[0].get("id", ""),
         "url":            xrefs_list[0].get("url", ""),
         "alternativeUrl": xrefs_list[0].get("alternativeUrl", ""),
+        "rs_id":          rs_id,
     })
 
 
@@ -136,7 +143,7 @@ def _process_variation_json(json_path: Path) -> pd.DataFrame:
 
     # ── Apply parsers exactly as in UniRet_SNP.py ──
     if "xrefs" in df.columns:
-        df[["name", "id", "url", "alternativeUrl"]] = df["xrefs"].apply(_parse_xrefs)
+        df[["name", "id", "url", "alternativeUrl", "rs_id"]] = df["xrefs"].apply(_parse_xrefs)
     if "predictions" in df.columns:
         df[["PredictionValType", "predictorType", "score",
             "predAlgorithmNameType", "sources"]] = df["predictions"].apply(_parse_predictions)
