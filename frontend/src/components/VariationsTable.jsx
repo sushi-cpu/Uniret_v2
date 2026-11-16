@@ -16,12 +16,14 @@ import {
   ExternalLink,
   Maximize2,
   Minimize2,
+  BookOpen,
 } from 'lucide-react';
 
 export default function VariationsTable({
   variations = [],
   selectedVariant,
   onSelectVariant,
+  onInspectVariant,
   accession,
   isExpanded = false,
   onToggleExpand,
@@ -193,7 +195,8 @@ export default function VariationsTable({
     if (debouncedQuery.trim()) {
       const q = debouncedQuery.toLowerCase();
       result = result.filter((r) => {
-        const rowStr = `${r.begin || ''} ${r.wildType || ''} ${r.mutatedType || ''} ${r.rs_id || ''} ${(r.rs_ids || []).join(' ')} ${r.type || ''} ${r.clinical_significance || ''} ${r.description || ''} ${r.predictsnp || ''} ${r.xref_id || ''} ${r.xref_name || ''} ${r.id || ''}`.toLowerCase();
+        const mutationCode = `${r.wildType || ''}${r.begin || ''}${r.mutatedType || ''}`;
+        const rowStr = `${mutationCode} ${r.begin || ''} ${r.wildType || ''} ${r.mutatedType || ''} ${r.rs_id || ''} ${(r.rs_ids || []).join(' ')} ${r.type || ''} ${r.clinical_significance || ''} ${r.description || ''} ${r.predictsnp || ''} ${r.xref_id || ''} ${r.xref_name || ''} ${r.id || ''}`.toLowerCase();
         return rowStr.includes(q);
       });
     }
@@ -605,6 +608,16 @@ export default function VariationsTable({
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {onInspectVariant && (
+              <button
+                onClick={() => onInspectVariant(selectedVariant)}
+                className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white font-medium px-2 py-0.5 rounded transition-colors flex items-center gap-1 shadow-sm"
+                title="Open detailed variant inspection panel"
+              >
+                <BookOpen className="w-3 h-3" />
+                <span>Variant Panel</span>
+              </button>
+            )}
             {isSelectedHidden ? (
               <button
                 onClick={resetAllFilters}
@@ -758,13 +771,23 @@ export default function VariationsTable({
                       </span>
                     </td>
 
-                    {/* Description (Single-line truncate with hover tooltip) */}
-                    <td className={`py-1.5 px-3 text-[11px] text-slate-300 ${isExpanded ? 'max-w-md' : 'max-w-[200px] xl:max-w-[280px]'}`}>
-                      <div
-                        className="truncate text-slate-200"
-                        title={v.description || (v.descriptions || []).join('; ')}
-                      >
-                        {v.description || (v.descriptions || []).join('; ') || <span className="text-slate-500 font-mono">-</span>}
+                    {/* Description (Clickable to open full detail drawer) */}
+                    <td
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectVariant(v);
+                        if (onInspectVariant) onInspectVariant(v);
+                      }}
+                      className={`py-1.5 px-3 text-[11px] text-slate-300 cursor-pointer group/desc ${
+                        isExpanded ? 'max-w-md' : 'max-w-[200px] xl:max-w-[280px]'
+                      }`}
+                      title="Click to view full un-truncated description and clinical annotations"
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="truncate text-slate-200 group-hover/desc:text-blue-300 transition-colors">
+                          {v.description || (v.descriptions || []).join('; ') || <span className="text-slate-500 font-mono">-</span>}
+                        </span>
+                        <BookOpen className="w-3 h-3 text-blue-400 opacity-0 group-hover/desc:opacity-100 shrink-0 transition-opacity" />
                       </div>
                     </td>
 
@@ -811,21 +834,37 @@ export default function VariationsTable({
                       )}
                     </td>
 
-                    {/* 3D Action */}
-                    <td className="py-1.5 px-3 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectVariant(v);
-                        }}
-                        className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 ml-auto font-medium transition-colors ${
-                          isSelected
-                            ? 'bg-blue-600 text-white shadow'
-                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                        }`}
-                      >
-                        <Eye className="w-3 h-3" /> 3D Focus
-                      </button>
+                    {/* Action Buttons: Details + 3D */}
+                    <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectVariant(v);
+                            if (onInspectVariant) onInspectVariant(v);
+                          }}
+                          className="text-xs px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white transition-colors flex items-center gap-1 border border-slate-700/80"
+                          title="Open detailed variant inspection panel"
+                        >
+                          <BookOpen className="w-3 h-3 text-blue-400 group-hover:text-white" />
+                          <span>Details</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectVariant(v);
+                          }}
+                          className={`text-xs px-2 py-0.5 rounded-lg flex items-center gap-1 font-medium transition-colors border ${
+                            isSelected
+                              ? 'bg-blue-600 text-white border-blue-500 shadow'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/80'
+                          }`}
+                          title="Pivot 3D structure and focus pocket"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>3D</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

@@ -5,6 +5,7 @@ export default function StructureViewer3D({
   accession,
   selectedVariant,
   onResidueClick,
+  onInspectVariant,
   isExpanded = false,
   onToggleExpand,
 }) {
@@ -407,6 +408,15 @@ export default function StructureViewer3D({
               </span>
               <span className="text-slate-400 ml-2 font-mono">Residue #{selectedVariant.begin || selectedVariant.position}</span>
             </div>
+            {onInspectVariant && (
+              <button
+                onClick={() => onInspectVariant(selectedVariant)}
+                className="text-[11px] bg-rose-600 hover:bg-rose-500 text-white font-medium px-2 py-0.5 rounded transition-colors ml-1"
+                title="Open variant detail panel"
+              >
+                Details →
+              </button>
+            )}
             <button
               onClick={() => onResidueClick && onResidueClick(null)}
               className="text-slate-400 hover:text-white font-bold ml-1 text-sm"

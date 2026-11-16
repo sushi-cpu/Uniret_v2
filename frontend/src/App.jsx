@@ -6,6 +6,7 @@ import StructureViewer3D from './components/StructureViewer3D';
 import SequenceTrack from './components/SequenceTrack';
 import VariationsTable from './components/VariationsTable';
 import PredictSNPDrawer from './components/PredictSNPDrawer';
+import VariantDetailDrawer from './components/VariantDetailDrawer';
 import BatchHub from './components/BatchHub';
 import { AlertCircle, RefreshCw, Columns, Table2, Layers, Maximize2 } from 'lucide-react';
 
@@ -31,6 +32,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
+  const [inspectedVariant, setInspectedVariant] = useState(null);
   const [isPredictSNPOpen, setIsPredictSNPOpen] = useState(false);
 
   // Fetch protein info & variations
@@ -39,6 +41,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     setSelectedVariant(null);
+    setInspectedVariant(null);
 
     const fetchData = async () => {
       try {
@@ -322,7 +325,10 @@ export default function App() {
                     <StructureViewer3D
                       accession={accession}
                       selectedVariant={selectedVariant}
-                      onResidueClick={(v) => setSelectedVariant(v)}
+                      onResidueClick={(v) => {
+                        setSelectedVariant(v);
+                      }}
+                      onInspectVariant={(v) => setInspectedVariant(v)}
                       isExpanded={false}
                       onToggleExpand={() => setWorkbenchLayout('structure')}
                     />
@@ -334,6 +340,7 @@ export default function App() {
                       variations={proteinData.variations}
                       selectedVariant={selectedVariant}
                       onSelectVariant={(v) => setSelectedVariant(v)}
+                      onInspectVariant={(v) => setInspectedVariant(v)}
                       accession={accession}
                       isExpanded={false}
                       onToggleExpand={() => setWorkbenchLayout('table')}
@@ -349,6 +356,7 @@ export default function App() {
                     variations={proteinData.variations}
                     selectedVariant={selectedVariant}
                     onSelectVariant={(v) => setSelectedVariant(v)}
+                    onInspectVariant={(v) => setInspectedVariant(v)}
                     accession={accession}
                     isExpanded={true}
                     onToggleExpand={() => setWorkbenchLayout('split')}
@@ -363,6 +371,7 @@ export default function App() {
                     accession={accession}
                     selectedVariant={selectedVariant}
                     onResidueClick={(v) => setSelectedVariant(v)}
+                    onInspectVariant={(v) => setInspectedVariant(v)}
                     isExpanded={true}
                     onToggleExpand={() => setWorkbenchLayout('split')}
                   />
@@ -371,6 +380,25 @@ export default function App() {
             </>
           )}
         </main>
+      )}
+
+      {/* Variant Detail Inspector Panel */}
+      {proteinData && (
+        <VariantDetailDrawer
+          isOpen={Boolean(inspectedVariant)}
+          onClose={() => setInspectedVariant(null)}
+          variant={inspectedVariant}
+          proteinInfo={proteinData.info}
+          variations={proteinData.variations}
+          onSelectVariant={(v) => {
+            setSelectedVariant(v);
+            setInspectedVariant(v);
+          }}
+          onFilterResidue={() => {
+            setSelectedVariant(inspectedVariant);
+            setInspectedVariant(null);
+          }}
+        />
       )}
 
       {/* PredictSNP Modal Drawer */}
