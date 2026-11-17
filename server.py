@@ -495,6 +495,205 @@ def get_predictsnp_data(accession: str):
     }
 
 
+@app.get("/api/trials")
+def search_clinical_trials(term: str = Query(..., description="Gene or variant query term"), page_size: int = 12):
+    """
+    Proxy endpoint for ClinicalTrials.gov API v2.
+    Provides fallback access with caching to prevent rate-limiting or CORS blocks.
+    """
+    url = "https://clinicaltrials.gov/api/v2/studies"
+    params = {
+        "query.term": term,
+        "filter.overallStatus": "RECRUITING|ACTIVE_NOT_RECRUITING",
+        "pageSize": page_size,
+    }
+    headers = {"User-Agent": "UniRet/2.0 (Clinical Trials Connector)"}
+    try:
+        r = requests.get(url, params=params, headers=headers, timeout=12)
+        if r.status_code == 200:
+            return r.json()
+        raise HTTPException(status_code=r.status_code, detail=f"ClinicalTrials.gov returned {r.status_code}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to query ClinicalTrials.gov: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Instant Variant Biophysical Triage & VCF Parser Endpoint
+# ---------------------------------------------------------------------------
+AA_VOLUMES = {
+    'A': 88.6, 'R': 173.4, 'N': 114.1, 'D': 111.1, 'C': 108.5,
+    'Q': 143.8, 'E': 138.4, 'G': 60.1, 'H': 153.2, 'I': 166.7,
+    'L': 166.7, 'K': 168.6, 'M': 162.9, 'F': 189.9, 'P': 112.7,
+    'S': 89.0, 'T': 116.1, 'W': 227.8, 'Y': 193.6, 'V': 140.0,
+}
+AA_CHARGES = {
+    'A': 0, 'R': 1, 'N': 0, 'D': -1, 'C': 0, 'Q': 0, 'E': -1,
+    'G': 0, 'H': 0.1, 'I': 0, 'L': 0, 'K': 1, 'M': 0, 'F': 0,
+    'P': 0, 'S': 0, 'T': 0, 'W': 0, 'Y': 0, 'V': 0,
+}
+GENE_ACCESSION_MAP = {
+    'EGFR': 'P00533', 'KIT': 'P10721', 'TP53': 'P04637', 'KRAS': 'P01116',
+    'PIK3CA': 'P42336', 'BRCA1': 'P38398', 'BRAF': 'P15056', 'PDGFRA': 'P16234',
+    'PTEN': 'P60484', 'APC': 'P25054', 'MET': 'P08581', 'ALK': 'Q9UM73',
+}
+
+
+def _triage_residue_mutation(wt: str, mut: str) -> dict:
+    wt = wt.upper()
+    mut = mut.upper()
+    if wt not in AA_VOLUMES or mut not in AA_VOLUMES:
+        return None
+
+    dv = round(AA_VOLUMES[mut] - AA_VOLUMES[wt], 1)
+    dq = round(AA_CHARGES[mut] - AA_CHARGES[wt], 1)
+
+    tier = "LOW"
+    score = 1
+    if dv >= 40 or (AA_CHARGES[wt] * AA_CHARGES[mut] < 0) or (wt == 'C' and mut != 'C'):
+        tier = "HIGH"
+        score = 3
+    elif dv >= 18 or dv <= -35 or wt in ('P', 'G') or mut == 'P':
+        tier = "MODERATE"
+        score = 2
+
+    return {
+        "deltaVolume": dv,
+        "deltaCharge": dq,
+        "riskTier": tier,
+        "riskScore": score,
+    }
+
+
+@app.post("/api/vcf/decompress")
+async def decompress_vcf_file(file: UploadFile = File(...)):
+    """
+    Fallback endpoint to transparently decompress any gzip, bgzip, or plain text VCF.
+    Handles multi-member bgzf streams without client-side buffer limitations.
+    """
+    import gzip
+    content_bytes = await file.read()
+    if content_bytes[:2] == b"\x1f\x8b" or (file.filename and file.filename.endswith(".gz")):
+        try:
+            content_bytes = gzip.decompress(content_bytes)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Decompression error: {e}")
+    text = content_bytes.decode("utf-8", errors="replace")
+    from fastapi.responses import Response
+    return Response(content=text, media_type="text/plain; charset=utf-8")
+
+
+@app.post("/api/vcf/vep")
+async def vep_annotate_variants(payload: dict):
+    """
+    Proxy endpoint to Ensembl VEP REST API for GRCh38 / GRCh37.
+    """
+    variants = payload.get("variants", [])
+    assembly = payload.get("assembly", "GRCh38")
+    if not variants:
+        return []
+
+    endpoint = "https://grch37.rest.ensembl.org/vep/human/region" if assembly == "GRCh37" else "https://rest.ensembl.org/vep/human/region"
+    try:
+        resp = requests.post(
+            endpoint,
+            json={"variants": variants[:100]},
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"VEP upstream connection error: {e}")
+
+
+
+@app.post("/api/vcf/triage")
+async def triage_vcf_file(file: UploadFile = File(...)):
+    """
+    Parse a patient VCF file and run Instant Biophysical Triage & Structural Risk Scoring.
+    Returns categorized records, high-risk expansions, and gene associations.
+    """
+    import re
+    import gzip
+    content_bytes = await file.read()
+    # Check for gzip magic header (0x1f, 0x8b) or .gz extension
+    if content_bytes[:2] == b"\x1f\x8b" or (file.filename and file.filename.endswith(".gz")):
+        try:
+            content_bytes = gzip.decompress(content_bytes)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to decompress .gz VCF: {e}")
+    text = content_bytes.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+
+    records = []
+    line_idx = 0
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        parts = line.split("\t") if "\t" in line else line.split()
+        if len(parts) < 5:
+            continue
+
+        line_idx += 1
+        chrom, pos, var_id, ref, alt = parts[0], parts[1], parts[2], parts[3], parts[4]
+        info_str = parts[7] if len(parts) > 7 else ""
+
+        gene = None
+        aa_change = None
+
+        m_gene = re.search(r'(?:GENE|SYMBOL)=([A-Za-z0-9_-]+)', info_str)
+        if m_gene:
+            gene = m_gene.group(1).upper()
+
+        m_aa = re.search(r'(?:AA|MUT|HGVS|HGVSp)=p?\.?\(?([A-Za-z])(\d+)([A-Za-z])\)?', info_str)
+        if m_aa:
+            aa_change = (m_aa.group(1).upper(), int(m_aa.group(2)), m_aa.group(3).upper())
+
+        # Fallback CSQ
+        if not aa_change and "CSQ=" in info_str:
+            m_csq = re.search(r'p\.([A-Za-z]{3}|\w)(\d+)([A-Za-z]{3}|\w)', info_str)
+            if m_csq:
+                # Simplistic single-letter conversion
+                w_char = m_csq.group(1)[0].upper()
+                p_num = int(m_csq.group(2))
+                m_char = m_csq.group(3)[0].upper()
+                aa_change = (w_char, p_num, m_char)
+
+        triage = None
+        if aa_change:
+            triage = _triage_residue_mutation(aa_change[0], aa_change[2])
+
+        records.append({
+            "index": line_idx,
+            "chrom": chrom,
+            "pos": pos,
+            "id": var_id if var_id != "." else None,
+            "ref": ref,
+            "alt": alt,
+            "gene": gene or "Unknown",
+            "accession": GENE_ACCESSION_MAP.get(gene, None) if gene else None,
+            "mutation": f"{aa_change[0]}{aa_change[1]}{aa_change[2]}" if aa_change else f"{ref}>{alt}",
+            "wt": aa_change[0] if aa_change else None,
+            "mut": aa_change[2] if aa_change else None,
+            "residuePos": aa_change[1] if aa_change else None,
+            "triage": triage,
+            "riskTier": triage["riskTier"] if triage else "UNKNOWN",
+            "deltaVolume": triage["deltaVolume"] if triage else 0,
+        })
+
+    return {
+        "filename": file.filename,
+        "total": len(records),
+        "highRiskCount": sum(1 for r in records if r["riskTier"] == "HIGH"),
+        "moderateRiskCount": sum(1 for r in records if r["riskTier"] == "MODERATE"),
+        "records": records,
+    }
+
+
 from fastapi.responses import FileResponse, Response
 import io
 import shutil

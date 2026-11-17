@@ -17,7 +17,9 @@ import {
   Maximize2,
   Minimize2,
   BookOpen,
+  Atom,
 } from 'lucide-react';
+import { analyzeResidueMutation } from '../utils/biophysics';
 
 export default function VariationsTable({
   variations = [],
@@ -650,6 +652,12 @@ export default function VariationsTable({
                 <div className="flex items-center gap-1">Pos <ArrowUpDown className="w-3 h-3" /></div>
               </th>
               <th className="py-2 px-3 whitespace-nowrap">Mutation</th>
+              <th className="py-2 px-3 whitespace-nowrap">
+                <div className="flex items-center gap-1" title="Instant Biophysical Triage: Sidechain van der Waals Volume Delta (ΔV)">
+                  <Atom className="w-3 h-3 text-cyan-400" />
+                  <span>Biophysics (ΔV)</span>
+                </div>
+              </th>
               <th className="py-2 px-3 whitespace-nowrap cursor-pointer hover:text-white" onClick={() => handleSort('rs_id')}>
                 <div className="flex items-center gap-1">rsID (dbSNP) <ArrowUpDown className="w-3 h-3" /></div>
               </th>
@@ -670,7 +678,7 @@ export default function VariationsTable({
           <tbody className="divide-y divide-slate-800/60 font-sans">
             {paginatedRows.length === 0 ? (
               <tr>
-                <td colSpan="9" className="py-16 text-center text-slate-400 text-xs">
+                <td colSpan="10" className="py-16 text-center text-slate-400 text-xs">
                   <div className="max-w-sm mx-auto space-y-2">
                     <p className="text-slate-300 font-medium">No variations match your filter criteria.</p>
                     <button
@@ -697,6 +705,7 @@ export default function VariationsTable({
                 const mutationText = `${v.wildType || ''}${v.begin}${v.mutatedType || ''}`;
                 const hasPredictSNP = Boolean(v.predictsnp);
                 const clinVal = v.clinical_significance || v.type_clin || '';
+                const bio = analyzeResidueMutation(v.wildType, v.mutatedType);
 
                 return (
                   <tr
@@ -719,6 +728,28 @@ export default function VariationsTable({
                       <span className="bg-slate-800 px-1.5 py-0.5 rounded text-blue-300 font-semibold border border-slate-700">
                         {mutationText}
                       </span>
+                    </td>
+
+                    {/* Biophysics (ΔV) */}
+                    <td className="py-1.5 px-3 font-mono whitespace-nowrap">
+                      {bio ? (
+                        <span
+                          className={`text-[11px] px-2 py-0.5 rounded font-mono font-semibold border ${
+                            bio.deltaVolume >= 40
+                              ? 'text-rose-300 bg-rose-950/60 border-rose-500/40'
+                              : bio.deltaVolume >= 15
+                              ? 'text-amber-300 bg-amber-950/60 border-amber-500/40'
+                              : bio.deltaVolume <= -35
+                              ? 'text-cyan-300 bg-cyan-950/60 border-cyan-500/40'
+                              : 'text-slate-400 bg-slate-900 border-slate-800'
+                          }`}
+                          title={`${bio.steric.label} | Charge shift: ${bio.charge.label}`}
+                        >
+                          {bio.deltaVolume > 0 ? `+${bio.deltaVolume}` : bio.deltaVolume} Å³
+                        </span>
+                      ) : (
+                        <span className="text-slate-600 text-[11px]">-</span>
+                      )}
                     </td>
 
                     {/* rsID (dbSNP) */}

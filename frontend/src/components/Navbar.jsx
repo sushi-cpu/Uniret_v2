@@ -8,6 +8,7 @@ import {
   Atom,
   ChevronDown,
   ArrowRight,
+  ShieldAlert,
 } from 'lucide-react';
 
 const PRESETS = [
@@ -85,6 +86,17 @@ export default function Navbar({
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Overview</span>
+            </button>
+            <button
+              onClick={() => onTabChange('vcf')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                activeTab === 'vcf'
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+              <span>VCF Triage</span>
             </button>
             <button
               onClick={() => onTabChange('workbench')}

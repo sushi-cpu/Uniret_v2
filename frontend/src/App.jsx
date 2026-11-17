@@ -8,6 +8,7 @@ import VariationsTable from './components/VariationsTable';
 import PredictSNPDrawer from './components/PredictSNPDrawer';
 import VariantDetailDrawer from './components/VariantDetailDrawer';
 import BatchHub from './components/BatchHub';
+import VcfTriageHub from './components/VcfTriageHub';
 import { AlertCircle, RefreshCw, Columns, Table2, Layers, Maximize2 } from 'lucide-react';
 
 // Fallback client-side genomic parser if backend is offline
@@ -199,6 +200,22 @@ export default function App() {
     setActiveTab('workbench');
   };
 
+  const handleLaunchIn3DFromVcf = (acc, residuePos, record) => {
+    if (acc) {
+      setAccession(acc);
+    }
+    setSelectedVariant({
+      begin: residuePos,
+      end: residuePos,
+      wildType: record.wt,
+      mutatedType: record.mut,
+      mutation: record.mutation,
+      gene: record.gene,
+      ...record,
+    });
+    setActiveTab('workbench');
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Top Navigation */}
@@ -218,14 +235,21 @@ export default function App() {
         />
       )}
 
-      {/* VIEW 2: BATCH PIPELINE HUB */}
+      {/* VIEW 2: PATIENT VCF TRIAGE HUB */}
+      {activeTab === 'vcf' && (
+        <main className="flex-1 w-full mx-auto">
+          <VcfTriageHub onLaunchIn3D={handleLaunchIn3DFromVcf} />
+        </main>
+      )}
+
+      {/* VIEW 3: BATCH PIPELINE HUB */}
       {activeTab === 'batch' && (
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 space-y-5">
           <BatchHub onSelectProteinFor3D={handleSelectProteinFromBatch} />
         </main>
       )}
 
-      {/* VIEW 3: 3D WORKBENCH */}
+      {/* VIEW 4: 3D WORKBENCH */}
       {activeTab === 'workbench' && (
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 space-y-5">
           {/* Loading Spinner */}
